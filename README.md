@@ -1,3 +1,3 @@
 # thesis-project
 
-This is a line I added to my thesis project README. 
+This is a line I added to my thesis project README.

@@ -1,0 +1,161 @@
+---
+title: "GDP and Employment Data from the World Bank"
+author: "Natalie Robertson"
+output: github_document
+---
+
+## Load necessary libraries
+
+```{r}
+library(tidyverse)
+library(knitr)
+library(readr)
+```
+
+## Write a function to import the data files
+```{r}
+# Create import function for one world bank file.
+
+importer <- function(path){
+# Skip first four rows to get to the column headers.
+  read_csv(path, skip = 4, show_col_types = FALSE) %>%
+# Delete the extraneous final column and tidy the data. 
+  select(-`...65`) %>%
+    pivot_longer(
+      cols = 5:64,
+      names_to = "year",
+      values_to = "values"
+    ) %>%
+    pivot_wider(
+      id_cols = c(1, 5),
+      names_from = `Indicator Name`,
+      values_from = `values`
+    ) %>%
+# Select relevant columns and variables.    
+    select(
+      "Country Name",
+      "year",
+      "Women participating in the three decisions (own health care, major household purchases, and visiting family) (% of women age 15-49)",
+      "Coverage of social safety net programs in 2nd quintile (% of population)",
+      "Labor force, female (% of total labor force)",
+      "Merchandise exports to high-income economies (% of total merchandise exports)",
+      "Fertility rate, total (births per woman)",
+      "GDP per capita growth (annual %)"
+      ) %>%
+# Rename variables for easier use.   
+    rename(
+      "country" = 'Country Name',
+      "womens_decisions" = 'Women participating in the three decisions (own health care, major household purchases, and visiting family) (% of women age 15-49)',
+      "safety_net" = 'Coverage of social safety net programs in 2nd quintile (% of population)',
+      "female_labor" = 'Labor force, female (% of total labor force)',
+      "merchandise_exports" = 'Merchandise exports to high-income economies (% of total merchandise exports)',
+      "fertility" = 'Fertility rate, total (births per woman)',
+      "gdp" = 'GDP per capita growth (annual %)'
+    )
+}
+
+
+# Import Poland to test.
+Poland <- importer("~/Documents/R/Thesis Project/thesis-project/data_world_bank/API_POL_DS2_en_csv_v2_1227751.csv")
+Poland
+
+```
+
+## Import the data
+```{r Import All Data, message=FALSE, warning=FALSE}
+# message = FALSE, to avoid the column spec error from printing. 
+
+# Create a list of all of the data files in the named folder that end with .csv.
+file_paths <- dir(path = "data_world_bank", pattern = "*.csv", full.names = TRUE)
+
+# Run the iterative function to import all files as a knitted data frame.
+full_import <- map_df(file_paths, importer)
+```
+
+## Explore the data
+
+The goal of this exploration is to examine the relationships between GDP growth, fertility rates, female labor participation, and social safety net coverage in countries that were in the former USSR or Eastern Bloc.
+
+```{r}
+# Create filtered data frame with selected countries from the former USSR and former Eastern Bloc to begin data exploration.
+
+eastern_bloc <- full_import %>%
+  filter(country == "Russian Federation" | country == "Poland" | country == "Czech Republic" | country == "Hungary" | country == "Romania" | country == "Bulgaria" | country == "Ukraine")
+
+# Plot GDP per capita to begin data exploration. 
+eastern_bloc_gdp <- eastern_bloc %>%
+  select("country", "year", "gdp") %>%
+  drop_na(gdp)
+
+eastern_bloc_gdp %>%
+  ggplot(
+    mapping = aes(x = year, y = gdp, color = country)
+  ) +
+  geom_line(aes(group = country)) +
+  labs(title = "GDP growth per capita per year, 1981-2019", subtitle = "For selected countries from the former USSR and Eastern Bloc", x = "Year", y = "Annual growth per capita (%)", legend = "Country", caption = "Source: The World Bank Databank") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+Most of these countries do not have GDP data prior to 1990, most likely due to difficulties in collecting data from economically closed-in socialist states. At the beginning of the 90s, all of these countries experience negative annual GDP growth per capita during the transition from planned to market economies. Ukraine experienced the most dramatic change, with more than a 20% drop in GDP in 1994. Poland experienced the fastest and highest growth in 1991 and 1992 after employing the "Shock Therapy" approach to market transition. During the economic transitions to market economies, GDP growth steadily improved for all into the 2000s. The drop in 2009 coincides with the global recession. Poland was the only country that experienced positive growth. Ukraine's drop in 2015 coincides with the Maidan revolution. Overall, this graph of GDP growth in selected countries from the former USSR and Eastern Bloc shows a relationship between economics and geopolitical events in central and eastern Europe.
+
+```{r}
+# Next, I want to explore the relationship between female labor participation and the fertility rate in Poland, the Czech Republic, and the Russian Federation.
+
+# Create relevant data frame
+eastern_bloc_fertility <- eastern_bloc %>%
+  filter(country == c("Poland", "Russian Federation", "Czech Republic")) %>%
+  select("country", "year", "fertility", "female_labor") %>%
+  drop_na(fertility) %>%
+  drop_na(female_labor)
+
+# Fertility Rate plot. 
+ggplot(eastern_bloc_fertility, mapping = aes(x = year, y = fertility, color = country)) +
+    geom_line(aes(group = country)) +
+  labs(title = "Fertility Rate, 1990-2019", x = "Year", y = "Fertility Rate", caption = "Source: The World Bank Databank", legend = "Country") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Labor Participation plot.
+ggplot(eastern_bloc_fertility, mapping = aes(x = year, y = female_labor, color = country)) +
+  geom_line(aes(group = country)) +
+  labs(title = "Female Labor Participation, 1990-2019", x = "Year", y = "Percent of Total Labor Force that is Female", caption = "Source: The World Bank Databank", legend = "Country") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+```
+
+These plots illuminate a few interesting points. The reported fertility rates per year show a sharp decrease from 1990 to 2000. Comparing this to the low GDP growths in 1990, it seems likely that families chose to have less children because of poor economic conditions. The growth in fertility is delayed from the growth in GDP by a few years, which makes sense considering that economic recovery time for individual families could take years. The fertility rate in Czech Republic and Poland was still increasing in 2016, though Russia began to decline. Lastly, Poland started with the highest fertility rate in 1990, but had the lowest in 2016. This is interesting in light of Poland's new family and child benefit policies that encourage families to have more children.
+
+Concerning female labor participation, there does not seem to be a strong correlation between the fertility rate and women working, except for a slight change in Poland. Women's labor begins to decline in 2002, and the fertility rate has increased since 2005. In Russia, however, female labor participation increased as the fertility rate also increased. Since 2006, labor participation has decline, and since 2014, the fertility rate has declined as well. It is important to note that all of the labor participation rates changed only within a 2% margin. More data analysis would be needed to compare this to global rates of change.
+
+```{r}
+# Lastly, I want to evaluate the female labor participation in comparison to the social safety net measure.
+
+# Create relevant data frame.
+eastern_bloc_safety <- eastern_bloc %>%
+  select("country", "year", "female_labor", "safety_net") %>%
+  drop_na(female_labor) %>%
+  drop_na(safety_net)
+
+# Plot the percent of female labor participation and percent coverage of social safety net, faceted by country.
+
+ggplot(NULL, aes(x, y)) +
+  geom_point(eastern_bloc_safety, mapping = aes(x = year, y = female_labor, color = "Female Labor Participation")) +
+  geom_point(eastern_bloc_safety, mapping = aes(x = year, y = safety_net, color = "Safety Net")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(vars(country)) +
+  labs(title = "Coverage of social safety net programs and female labor participation", subtitle = "In select countries from the former USSR and eastern bloc, 2005-2019", x = "Year", y = "Percent of total population", caption = "Source: The World Bank Databank")
+  
+```
+
+The coverage of social safety net programs measures the percent of the population that is covered by social safety nets provided by the government. This includes welfare, childcare, unemployment, etc. I wanted to map the coverage of these programs with female labor participation to see if there is a correlation between the prevalence of female work and the safety nets provided for childcare and unemployment. 
+
+However, the data for this measure were extremely limited. Data were not available for the Czech Republic, and there were only a few years available for the rest of the selected countries. Of the few data points available, there does not seem to be a correlation between social safety net programs and female labor participation. More data collection and analysis of other variables that indicate social safety nets are needed.
+
+## Session info
+
+```{r}
+sessioninfo::session_info()
+```
+
+
+
